@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SetPiece — Performance Analytics</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #09090b;
+  --bg1:      #111113;
+  --bg2:      #18181b;
+  --bg3:      #1f1f23;
+  --acid:     #e8ff47;
+  --acid-dim: #b8cc2a;
+  --acid-glow:rgba(232,255,71,0.12);
+  --white:    #f4f4f5;
+  --muted:    #71717a;
+  --muted2:   #52525b;
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(232,255,71,0.18);
+  --red:      #f43f5e;
+  --blue:     #38bdf8;
+  --green:    #4ade80;
+  --r: 10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--white);min-height:100vh;overflow-x:hidden}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg3);border-radius:2px}
+
+/* ── NOISE OVERLAY ── */
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:0;opacity:.6
+}
+
+/* ── NAV ── */
+.nav{
+  position:fixed;top:0;left:0;right:0;z-index:900;
+  height:56px;
+  background:rgba(9,9,11,0.85);
+  backdrop-filter:blur(24px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding:0 2rem;
+  justify-content:space-between;
+  transition:opacity .4s
+}
+.nav-logo{
+  display:flex;align-items:center;gap:10px
+}
+.nav-mark{
+  width:28px;height:28px;
+  background:var(--acid);
+  border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0
+}
+.nav-mark svg{display:block}
+.nav-name{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.35rem;letter-spacing:.06em;color:var(--white);line-height:1
+}
+.nav-tag{
+  font-family:'DM Mono',monospace;
+  font-size:.55rem;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--muted);margin-left:2px;line-height:1
+}
+.nav-pill{
+  font-family:'DM Mono',monospace;
+  font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--acid);
+  border:1px solid var(--border2);
+  padding:.2rem .65rem;border-radius:20px;
+  background:rgba(232,255,71,.05)
+}
+
+/* ── HERO ── */
+#hero{
+  position:relative;z-index:1;
+  min-height:100vh;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:80px 2rem 4rem;
+  text-align:center;
+  transition:all .6s cubic-bezier(.4,0,.2,1)
+}
+.hero-eyebrow{
+  font-family:'DM Mono',monospace;
+  font-size:.65rem;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--acid);margin-bottom:1.5rem;
+  animation:fadeUp .7s .1s both
+}
+.hero-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:clamp(4rem,12vw,9rem);
+  letter-spacing:.03em;line-height:.9;
+  color:var(--white);
+  margin-bottom:.75rem;
+  animation:fadeUp .7s .2s both
+}
+.hero-title span{color:var(--acid)}
+.hero-sub{
+  font-size:clamp(.95rem,2vw,1.1rem);
+  color:var(--muted);
+  font-weight:300;
+  max-width:480px;
+  line-height:1.7;
+  margin-bottom:3rem;
+  animation:fadeUp .7s .3s both
+}
+.hero-sub strong{color:var(--white);font-weight:500}
+
+/* ── DROP ZONE (hero) ── */
+.hero-drop{
+  width:100%;max-width:560px;
+  animation:fadeUp .7s .45s both;
+  position:relative
+}
+.drop-zone{
+  border:2px dashed rgba(232,255,71,0.25);
+  border-radius:16px;
+  padding:3rem 2rem;
+  text-align:center;
+  cursor:pointer;
+  transition:all .25s;
+  background:rgba(232,255,71,0.03);
+  position:relative;
+  overflow:hidden
+}
+.drop-zone::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 50% 0%,rgba(232,255,71,0.06) 0%,transparent 70%);
+  pointer-events:none
+}
+.drop-zone:hover,.drop-zone.drag-over{
+  border-color:var(--acid);
+  background:rgba(232,255,71,0.06);
+  box-shadow:0 0 60px rgba(232,255,71,0.08),inset 0 0 40px rgba(232,255,71,0.04)
+}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.drop-icon{
+  font-size:2.2rem;margin-bottom:1rem;
+  display:block;
+  filter:grayscale(1) brightness(2);
+  transition:filter .2s
+}
+.drop-zone:hover .drop-icon{filter:none}
+.drop-title{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.3rem;letter-spacing:.08em;
+  color:var(--white);margin-bottom:.4rem
+}
+.drop-sub{
+  font-family:'DM Mono',monospace;
+  font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted);line-height:1.8
+}
+.drop-sub span{color:var(--acid)}
+
+/* ── HERO FEATURES STRIP ── */
+.features-strip{
+  display:flex;gap:2rem;flex-wrap:wrap;justify-content:center;
+  margin-top:2.5rem;
+  animation:fadeUp .7s .6s both
+}
+.feat{
+  display:flex;align-items:center;gap:.5rem;
+  font-family:'DM Mono',monospace;
+  font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted2)
+}
+.feat::before{content:'✓';color:var(--acid);font-weight:700}
+
+/* ── PARSE ERROR ── */
+.parse-error{
+  background:rgba(244,63,94,0.08);
+  border:1px solid rgba(244,63,94,0.2);
+  border-radius:10px;padding:.9rem 1.1rem;
+  color:var(--red);font-size:.75rem;
+  font-family:'DM Mono',monospace;
+  margin-top:1rem;text-align:left;line-height:1.7
+}
+
+/* ── APP SHELL (hidden until CSV loaded) ── */
+#app{
+  display:none;
+  position:relative;z-index:1;
+  padding-top:56px;
+  animation:fadeIn .5s ease
+}
+
+/* ── APP HEADER ── */
+.app-header{
+  border-bottom:1px solid var(--border);
+  background:var(--bg1);
+  padding:1.25rem 2rem;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  flex-wrap:wrap;gap:1rem
+}
+.app-match-name{
+  font-family:'Bebas Neue',sans-serif;
+  font-size:1.8rem;letter-spacing:.04em;color:var(--acid);line-height:1
+}
+.app-match-meta{
+  font-family:'DM Mono',monospace;
+  font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;
+  color:var(--muted);margin-top:.3rem
+}
+.app-actions{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+
+/* ── TAB BAR ── */
+.tab-bar{
+  display:flex;overflow-x:auto;
+  border-bottom:1px solid var(--border);
+  background:var(--bg1);
+  scrollbar-width:none;
+  padding:0 2rem
+}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab-btn{
+  flex-shrink:0;
+  padding:.8rem 1.25rem;
+  font-family:'DM Mono',monospace;
+  font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--muted);border:none;background:transparent;
+  cursor:pointer;border-bottom:2px solid transparent;
+  transition:all .2s;white-space:nowrap
+}
+.tab-btn:hover{color:var(--white)}
+.tab-btn.active{color:var(--acid);border-bottom-color:var(--acid)}
+
+/* ── PAGE ── */
+.page{display:none}
+.page.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+
+/* ── MAIN CONTENT ── */
+.content{max-width:1400px;margin:0 auto;padding:1.75rem 2rem}
+
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.5rem}
+@media(max-width:768px){.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+.kpi{
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:1.1rem 1rem;position:relative;overflow:hidden
+}
+.kpi::after{content:'';position:absolute;bottom:0;left:0;height:2px;width:100%;background:var(--ka,var(--acid));opacity:.5}
+.kl{font-family:'DM Mono',monospace;font-size:.52rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.4rem}
+.kv{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--ka,var(--acid));line-height:1;letter-spacing:.03em}
+.ku{font-size:.7rem;opacity:.6;margin-left:2px;font-family:'DM Mono',monospace}
+.ksub{font-family:'DM Mono',monospace;font-size:.55rem;color:var(--muted);margin-top:.2rem}
+
+/* ── CARD ── */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1.25rem;position:relative;overflow:hidden;margin-bottom:.75rem}
+.card-title{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+.card-title::before{content:'';display:block;width:2px;height:10px;background:var(--acid);border-radius:1px;flex-shrink:0}
+
+/* ── GRID LAYOUTS ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.75rem}
+.stack{display:flex;flex-direction:column;gap:.75rem}
+@media(max-width:640px){.g2,.g3{grid-template-columns:1fr}}
+
+/* ── CHART WRAP ── */
+.cw{position:relative;width:100%}
+.cw canvas{max-height:260px}
+.cw-tall canvas{max-height:340px}
+
+/* ── TABLE ── */
+.ts{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.data-table{width:100%;border-collapse:collapse;font-size:.75rem}
+.data-table th{font-family:'DM Mono',monospace;font-size:.5rem;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding:.65rem .8rem;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table td{padding:.65rem .8rem;border-bottom:1px solid rgba(255,255,255,0.03);white-space:nowrap;font-family:'DM Mono',monospace;font-size:.72rem}
+.data-table tr:last-child td{border-bottom:none}
+.data-table tr:hover td{background:rgba(255,255,255,0.02)}
+.cell-top{color:var(--acid);font-weight:500}
+.cell-top .star{font-size:.55rem;vertical-align:middle;margin-left:2px}
+.dim{color:var(--muted)}
+
+/* ── BADGES ── */
+.badge{display:inline-block;padding:.12rem .5rem;border-radius:4px;font-family:'DM Mono',monospace;font-size:.52rem;font-weight:500;letter-spacing:.08em;text-transform:uppercase}
+.b-back{background:rgba(74,222,128,.1);color:var(--green);border:1px solid rgba(74,222,128,.2)}
+.b-fwd {background:rgba(56,189,248,.1);color:var(--blue); border:1px solid rgba(56,189,248,.2)}
+.b-acid{background:rgba(232,255,71,.1);color:var(--acid); border:1px solid rgba(232,255,71,.2)}
+
+/* ── PLAYER CARDS ── */
+.player-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.65rem}
+.pos-header{
+  font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:.1em;
+  color:var(--muted);padding:.5rem 0 .75rem;
+  border-bottom:1px solid var(--border);margin-bottom:.75rem;
+  display:flex;align-items:center;gap:.75rem
+}
+.pos-header span{color:var(--white)}
+.player-card{
+  background:var(--bg3);border:1px solid var(--border);
+  border-radius:8px;padding:.85rem;
+  transition:border-color .2s,box-shadow .2s;
+  cursor:default
+}
+.player-card:hover{border-color:rgba(232,255,71,0.2);box-shadow:0 0 20px rgba(232,255,71,0.04)}
+.player-card.is-top{border-color:rgba(232,255,71,0.3)}
+.pc-name{font-family:'DM Sans',sans-serif;font-size:.85rem;font-weight:600;color:var(--white);margin-bottom:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-pos{font-family:'DM Mono',monospace;font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:.65rem;display:flex;align-items:center;gap:.4rem}
+.pc-row{display:flex;justify-content:space-between;align-items:center;padding:.2rem 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.pc-row:last-child{border-bottom:none}
+.pc-label{font-family:'DM Mono',monospace;font-size:.56rem;color:var(--muted)}
+.pc-val{font-family:'DM Mono',monospace;font-size:.72rem;font-weight:500;color:var(--white)}
+.pc-val.top{color:var(--acid)}
+.pc-val.good{color:var(--green)}
+.half-split{margin-top:.5rem}
+.half-lbl{font-family:'DM Mono',monospace;font-size:.52rem;color:var(--muted2);letter-spacing:.06em;margin-bottom:.25rem}
+.half-track{height:5px;background:var(--bg);border-radius:3px;overflow:hidden;display:flex}
+.half-t1{background:var(--acid);border-radius:3px 0 0 3px;opacity:.75;transition:width .5s ease}
+.half-t2{background:var(--blue);border-radius:0 3px 3px 0;opacity:.6;transition:width .5s ease}
+
+/* ── BUTTONS ── */
+.btn{
+  font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.12em;text-transform:uppercase;
+  border-radius:7px;padding:.5rem 1rem;cursor:pointer;transition:all .15s;border:none;white-space:nowrap
+}
+.btn-primary{background:var(--acid);color:var(--bg);font-weight:600}
+.btn-primary:hover{background:#f5ff6e;box-shadow:0 0 20px rgba(232,255,71,0.25)}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:rgba(255,255,255,0.2);color:var(--white)}
+.btn-danger{background:rgba(244,63,94,0.1);color:var(--red);border:1px solid rgba(244,63,94,0.2)}
+.btn-danger:hover{background:rgba(244,63,94,0.18)}
+.btn-save-rep{background:rgba(232,255,71,0.1);color:var(--acid);border:1px solid var(--border2)}
+.btn-save-rep:hover{background:rgba(232,255,71,0.18)}
+
+/* ── SAVED REPORTS PANEL ── */
+.reports-list{display:flex;flex-direction:column;gap:.5rem}
+.report-item{
+  background:var(--bg3);border:1px solid var(--border);border-radius:8px;
+  padding:.75rem 1rem;
+  display:flex;align-items:center;justify-content:space-between;gap:.75rem
+}
+.report-item-name{font-size:.8rem;font-weight:500;color:var(--white)}
+.report-item-meta{font-family:'DM Mono',monospace;font-size:.55rem;color:var(--muted);margin-top:.15rem;letter-spacing:.06em}
+.report-item-actions{display:flex;gap:.4rem;flex-shrink:0}
+.no-reports{
+  font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted2);
+  text-align:center;padding:2rem;letter-spacing:.1em;
+  border:1px dashed var(--border);border-radius:8px
+}
+
+/* ── COMPARE TAB ── */
+.compare-select-wrap{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem}
+@media(max-width:500px){.compare-select-wrap{grid-template-columns:1fr}}
+.compare-select-box{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1rem}
+.compare-select-label{font-family:'DM Mono',monospace;font-size:.58rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);margin-bottom:.6rem}
+.compare-select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:.55rem .75rem;font-family:'DM Mono',monospace;font-size:.7rem;color:var(--white);outline:none;cursor:pointer}
+.compare-select:focus{border-color:var(--acid)}
+.compare-select option{background:var(--bg2)}
+.compare-vs{
+  font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:.1em;
+  color:var(--acid);text-align:center;padding:.5rem 0;
+  align-self:center
+}
+.compare-metric-grid{display:grid;grid-template-columns:1fr auto 1fr;gap:.75rem;align-items:center;margin-bottom:.5rem}
+.cmp-val{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;letter-spacing:.03em;line-height:1}
+.cmp-val.left{text-align:right;color:var(--acid)}
+.cmp-val.right{text-align:left;color:var(--blue)}
+.cmp-label{font-family:'DM Mono',monospace;font-size:.55rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);text-align:center}
+.cmp-bar-wrap{margin:1rem 0}
+.cmp-bar-track{height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;display:flex}
+.cmp-bar-left{background:var(--acid);opacity:.75;border-radius:3px 0 0 3px;transition:width .6s ease}
+.cmp-bar-right{background:var(--blue);opacity:.65;border-radius:0 3px 3px 0;transition:width .6s ease}
+.cmp-winner{font-family:'DM Mono',monospace;font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;padding:.12rem .4rem;border-radius:3px}
+.cmp-w-left{background:rgba(232,255,71,.12);color:var(--acid);text-align:right}
+.cmp-w-right{background:rgba(56,189,248,.12);color:var(--blue)}
+.cmp-tie{background:rgba(255,255,255,.06);color:var(--muted);text-align:center}
+
+/* ── LOAD-NEW DROP (in app) ── */
+.mini-drop{
+  border:1px dashed rgba(232,255,71,0.2);border-radius:10px;
+  padding:1.5rem;text-align:center;cursor:pointer;
+  background:rgba(232,255,71,0.02);transition:all .2s;position:relative
+}
+.mini-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.mini-drop:hover{border-color:var(--acid);background:rgba(232,255,71,0.05)}
+.mini-drop-text{font-family:'DM Mono',monospace;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+/* ── EMPTY COMPARE ── */
+.empty-compare{
+  text-align:center;padding:4rem 2rem;
+  font-family:'DM Mono',monospace;font-size:.7rem;
+  letter-spacing:.12em;text-transform:uppercase;color:var(--muted2)
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="mainNav">
+  <div class="nav-logo">
+    <div class="nav-mark">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#09090b" stroke-width="2.8">
+        <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5"/>
+        <line x1="12" y1="2" x2="12" y2="22"/>
+        <line x1="2" y1="8.5" x2="22" y2="8.5"/>
+        <line x1="2" y1="15.5" x2="22" y2="15.5"/>
+      </svg>
+    </div>
+    <div>
+      <div class="nav-name">SetPiece</div>
+      <div class="nav-tag">Performance Analytics</div>
+    </div>
+  </div>
+  <div class="nav-pill" id="navPill">Rugby · GPS Analytics</div>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════
+     HERO
+═══════════════════════════════════════════════════════════ -->
+<section id="hero">
+  <div class="hero-eyebrow">Performance Analytics · Rugby</div>
+  <h1 class="hero-title">SET<span>PIECE</span></h1>
+  <p class="hero-sub">
+    <strong>Turn raw data into decisions.</strong><br>
+    Drop your Catapult CSV and get a full squad performance report — splits, loads, top performers — in seconds. No setup. No spreadsheets.
+  </p>
+  <div class="hero-drop">
+    <div class="drop-zone" id="heroDropZone">
+      <input type="file" accept=".csv" id="heroFileInput" onchange="handleFile(event)">
+      <span class="drop-icon">⬡</span>
+      <div class="drop-title">Drop Catapult CSV here</div>
+      <div class="drop-sub">or click to browse · <span>Catapult OpenField / Cloud export</span></div>
+    </div>
+    <div id="hero-error"></div>
+  </div>
+  <div class="features-strip">
+    <div class="feat">Auto Back/Forward split</div>
+    <div class="feat">Half-by-half splits</div>
+    <div class="feat">Save &amp; compare matches</div>
+    <div class="feat">No login required</div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════════════════
+     APP
+═══════════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- Match header -->
+  <div class="app-header">
+    <div>
+      <div class="app-match-name" id="appMatchName">—</div>
+      <div class="app-match-meta" id="appMatchMeta">—</div>
+    </div>
+    <div class="app-actions">
+      <button class="btn btn-save-rep" onclick="saveCurrentReport()">↓ Guardar reporte</button>
+      <button class="btn btn-ghost" onclick="showLoadNew()">+ Nuevo CSV</button>
+      <button class="btn btn-danger" onclick="backToHero()">✕ Salir</button>
+    </div>
+  </div>
+
+  <!-- Load new drop (hidden by default) -->
+  <div id="loadNewWrap" style="display:none;padding:1rem 2rem;background:var(--bg1);border-bottom:1px solid var(--border)">
+    <div class="mini-drop" id="miniDrop">
+      <input type="file" accept=".csv" id="miniFileInput" onchange="handleFile(event,true)">
+      <div class="mini-drop-text">Arrastrá un nuevo CSV o hacé click para cargar otro partido</div>
+    </div>
+    <div id="mini-error" style="margin-top:.5rem"></div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="showTab('squad')"  data-tab="squad">Equipo</button>
+    <button class="tab-btn"        onclick="showTab('compare')" data-tab="compare">Comparar</button>
+    <button class="tab-btn"        onclick="showTab('saved')"   data-tab="saved">Reportes guardados</button>
+  </div>
+
+  <!-- ── SQUAD TAB ── -->
+  <div id="tab-squad" class="page active">
+    <div class="content">
+      <div class="kpi-grid" id="squadKpis"></div>
+      <div class="g2" style="margin-bottom:.75rem">
+        <div class="card">
+          <div class="card-title">Distancia total por jugador (m)</div>
+          <div class="cw-tall cw"><canvas id="cDist"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Intensidad — m/min por jugador</div>
+          <div class="cw-tall cw"><canvas id="cMpm"></canvas></div>
+        </div>
+      </div>
+      <div class="g2" style="margin-bottom:.75rem">
+        <div class="card">
+          <div class="card-title">Aceleraciones vs Desaceleraciones</div>
+          <div class="cw-tall cw"><canvas id="cAccDec"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Velocidad máxima (m/s)</div>
+          <div class="cw-tall cw"><canvas id="cVel"></canvas></div>
+        </div>
+      </div>
+      <div class="card" style="margin-bottom:.75rem">
+        <div class="card-title">Player Load total</div>
+        <div class="cw"><canvas id="cLoad"></canvas></div>
+      </div>
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="card-title">Splits por tiempo — distancia 1T vs 2T</div>
+        <div class="cw"><canvas id="cHalf"></canvas></div>
+      </div>
+
+      <!-- Backs -->
+      <div style="margin-bottom:1.5rem">
+        <div class="pos-header"><span>Backs</span> <span id="backs-count" style="font-size:.75rem;color:var(--muted)"></span></div>
+        <div class="player-grid" id="backsGrid"></div>
+      </div>
+      <!-- Forwards -->
+      <div style="margin-bottom:1.5rem">
+        <div class="pos-header"><span>Forwards</span> <span id="fwds-count" style="font-size:.75rem;color:var(--muted)"></span></div>
+        <div class="player-grid" id="fwdsGrid"></div>
+      </div>
+
+      <!-- Full table -->
+      <div class="card">
+        <div class="card-title">Tabla completa del plantel · <span style="color:var(--acid);opacity:.7">★ = mejor del partido</span></div>
+        <div class="ts">
+          <table class="data-table">
+            <thead><tr>
+              <th>Jugador</th><th>Posición</th><th>Sector</th>
+              <th>Dist (m)</th><th>m/min</th><th>Vel Máx (m/s)</th>
+              <th>Acc</th><th>Dec</th><th>Tackles</th><th>Player Load</th><th>Min</th>
+            </tr></thead>
+            <tbody id="squadTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── COMPARE TAB ── -->
+  <div id="tab-compare" class="page">
+    <div class="content">
+      <div class="compare-select-wrap">
+        <div class="compare-select-box">
+          <div class="compare-select-label">Partido A</div>
+          <select class="compare-select" id="cmpA" onchange="renderCompare()">
+            <option value="">— Seleccioná un partido —</option>
+          </select>
+        </div>
+        <div class="compare-select-box">
+          <div class="compare-select-label">Partido B</div>
+          <select class="compare-select" id="cmpB" onchange="renderCompare()">
+            <option value="">— Seleccioná un partido —</option>
+          </select>
+        </div>
+      </div>
+      <div id="compareBody">
+        <div class="empty-compare">Seleccioná dos partidos guardados para comparar</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SAVED TAB ── -->
+  <div id="tab-saved" class="page">
+    <div class="content">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:.75rem">
+        <div style="font-family:'DM Mono',monospace;font-size:.6rem;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">Reportes guardados en este dispositivo</div>
+        <button class="btn btn-danger" onclick="clearAllReports()" style="font-size:.55rem">✕ Borrar todos</button>
+      </div>
+      <div id="savedList"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  CONSTANTS & STATE
+// ════════════════════════════════════════════════════════════
+const ACID='#e8ff47', RED='#f43f5e', BLUE='#38bdf8', GREEN='#4ade80', MUTED='#71717a';
+const BACK_PREFIXES=['05','06','07','08','09','10'];
+
+const CHARTS={};
+let CURRENT=null;   // currently displayed parsed data
+let SAVED_REPORTS=loadSaved();  // array of {id, name, date, data}
+
+// Chart defaults
+Chart.defaults.color='rgba(244,244,245,0.4)';
+Chart.defaults.borderColor='rgba(255,255,255,0.05)';
+Chart.defaults.font.family="'DM Mono',sans-serif";
+Chart.defaults.font.size=10;
+
+const TT={
+  backgroundColor:'rgba(9,9,11,0.97)',
+  borderColor:'rgba(232,255,71,0.15)',borderWidth:1,
+  titleColor:ACID,bodyColor:'rgba(244,244,245,0.8)',
+  titleFont:{family:"'DM Mono',monospace",size:10},
+  bodyFont:{family:"'DM Mono',monospace",size:10},
+  padding:10,cornerRadius:6
+};
+const XS={ticks:{font:{size:8,family:"'DM Mono',monospace"},maxRotation:45,color:'rgba(244,244,245,0.35)'},grid:{color:'rgba(255,255,255,0.03)'}};
+const YS={ticks:{font:{size:8,family:"'DM Mono',monospace"},color:'rgba(244,244,245,0.35)'},grid:{color:'rgba(255,255,255,0.04)'}};
+
+function mkC(id,type,data,opts){
+  const ctx=document.getElementById(id);if(!ctx)return;
+  if(CHARTS[id])CHARTS[id].destroy();
+  CHARTS[id]=new Chart(ctx,{type,data,options:opts||baseOpts()});
+  return CHARTS[id];
+}
+function baseOpts(unit){
+  return{
+    responsive:true,maintainAspectRatio:false,
+    animation:{duration:600,easing:'easeInOutQuart'},
+    plugins:{legend:{display:false},tooltip:{...TT,callbacks:unit?{label:ctx=>`${ctx.raw} ${unit}`}:{}}},
+    scales:{x:XS,y:YS}
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+//  CSV PARSER
+// ════════════════════════════════════════════════════════════
+function parseCatapultCSV(text){
+  text=text.replace(/\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const lines=text.split('\n').filter(l=>l.trim()!=='');
+
+  const meta={};
+  for(let i=0;i<Math.min(9,lines.length);i++){
+    const c=parseCSVLine(lines[i]);
+    if(c[0]&&c[1]){const k=c[0].replace(/[":]/g,'').trim();meta[k]=c[1].trim();}
+  }
+
+  let hIdx=-1;
+  for(let i=0;i<lines.length;i++){if(lines[i].includes('Player Name')){hIdx=i;break;}}
+  if(hIdx===-1)throw new Error('No se encontró la fila de encabezados. ¿Es un CSV de Catapult?');
+
+  const headers=parseCSVLine(lines[hIdx]).map(h=>h.trim());
+  const ci={
+    name:    headers.findIndex(h=>h==='Player Name'),
+    periodN: headers.findIndex(h=>h==='Period Number'),
+    dur:     headers.findIndex(h=>/Total Duration/i.test(h)),
+    dist:    headers.findIndex(h=>/Total Distance/i.test(h)),
+    mpm:     headers.findIndex(h=>/Meterage Per Minute/i.test(h)),
+    acc:     headers.findIndex(h=>/Acceleration/i.test(h)),
+    dec:     headers.findIndex(h=>/Deceleration/i.test(h)),
+    vel:     headers.findIndex(h=>/Maximum Velocity/i.test(h)),
+    tack:    headers.findIndex(h=>/Tackles/i.test(h)),
+    pos:     headers.findIndex(h=>/Position Name/i.test(h)),
+    load:    headers.findIndex(h=>/Player Load/i.test(h)),
+  };
+  if(ci.name===-1||ci.dist===-1)throw new Error('Formato de CSV inesperado — faltan columnas clave.');
+
+  const session=[],h1=[],h2=[];
+  for(let i=hIdx+1;i<lines.length;i++){
+    const c=parseCSVLine(lines[i]);if(c.length<5)continue;
+    const pn=parseInt(c[ci.periodN])||0;
+    const row={
+      name:(c[ci.name]||'').trim(),
+      dist:parseFloat(c[ci.dist])||0,
+      mpm:parseFloat(c[ci.mpm])||0,
+      acc:parseInt(c[ci.acc])||0,
+      dec:parseInt(c[ci.dec])||0,
+      vel:parseFloat(c[ci.vel])||0,
+      tack:parseInt(c[ci.tack])||0,
+      pos:(c[ci.pos]||'').trim(),
+      load:parseFloat(c[ci.load])||0,
+      dur:(c[ci.dur]||'').trim(),
+    };
+    row.min=durToMin(row.dur);
+    if(pn===0)session.push(row);
+    else if(pn===1)h1.push(row);
+    else if(pn===2)h2.push(row);
+  }
+  if(session.length===0)throw new Error('No se encontraron filas de sesión (Period 0).');
+
+  session.forEach(p=>{
+    const a=h1.find(x=>x.name===p.name);
+    const b=h2.find(x=>x.name===p.name);
+    p.dist1=a?a.dist:null; p.dist2=b?b.dist:null;
+    const num=p.pos.trim().substring(0,2);
+    p.sector=BACK_PREFIXES.includes(num)?'Back':'Forward';
+    p.posClean=p.pos.replace(/^\d+\s*-\s*/,'').trim()||'—';
+  });
+  session.sort((a,b)=>{
+    if(a.sector!==b.sector)return a.sector==='Forward'?-1:1;
+    return (parseInt(a.pos)||99)-(parseInt(b.pos)||99);
+  });
+
+  return{meta,players:session,date:meta['Date']||'',raw:text};
+}
+
+function parseCSVLine(line){
+  const r=[];let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){inQ=!inQ;continue;}
+    if(c===','&&!inQ){r.push(cur);cur='';continue;}
+    cur+=c;
+  }
+  r.push(cur);return r;
+}
+
+function durToMin(dur){
+  if(!dur)return null;
+  const p=dur.split(':').map(Number);
+  if(p.length===3)return Math.round(p[0]*60+p[1]+p[2]/60);
+  if(p.length===2)return Math.round(p[0]+p[1]/60);
+  return null;
+}
+
+// ════════════════════════════════════════════════════════════
+//  FILE HANDLING
+// ════════════════════════════════════════════════════════════
+function handleFile(e,isReload){
+  const file=e.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{
+    const errEl=document.getElementById(isReload?'mini-error':'hero-error');
+    try{
+      const parsed=parseCatapultCSV(ev.target.result);
+      parsed.fileName=file.name;
+      errEl.innerHTML='';
+      loadReport(parsed);
+      if(isReload)document.getElementById('loadNewWrap').style.display='none';
+    }catch(err){
+      errEl.innerHTML=`<div class="parse-error">✗ ${err.message}</div>`;
+    }
+    e.target.value='';
+  };
+  reader.readAsText(file,'UTF-8');
+}
+
+// drag/drop on hero
+const hdz=document.getElementById('heroDropZone');
+hdz.addEventListener('dragover',e=>{e.preventDefault();hdz.classList.add('drag-over');});
+hdz.addEventListener('dragleave',()=>hdz.classList.remove('drag-over'));
+hdz.addEventListener('drop',e=>{
+  e.preventDefault();hdz.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];if(f){
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{const p=parseCatapultCSV(ev.target.result);p.fileName=f.name;document.getElementById('hero-error').innerHTML='';loadReport(p);}
+      catch(err){document.getElementById('hero-error').innerHTML=`<div class="parse-error">✗ ${err.message}</div>`;}
+    };r.readAsText(f,'UTF-8');
+  }
+});
+
+// drag/drop on mini
+const mdz=document.getElementById('miniDrop');
+mdz.addEventListener('dragover',e=>{e.preventDefault();mdz.classList.add('drag-over');});
+mdz.addEventListener('dragleave',()=>mdz.classList.remove('drag-over'));
+mdz.addEventListener('drop',e=>{
+  e.preventDefault();mdz.classList.remove('drag-over');
+  const f=e.dataTransfer.files[0];if(f){
+    const r=new FileReader();
+    r.onload=ev=>{
+      try{const p=parseCatapultCSV(ev.target.result);p.fileName=f.name;document.getElementById('mini-error').innerHTML='';loadReport(p,true);}
+      catch(err){document.getElementById('mini-error').innerHTML=`<div class="parse-error">✗ ${err.message}</div>`;}
+    };r.readAsText(f,'UTF-8');
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+//  LOAD REPORT → SHOW APP
+// ════════════════════════════════════════════════════════════
+function loadReport(data,keepTab){
+  CURRENT=data;
+  document.getElementById('hero').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('loadNewWrap').style.display='none';
+  window.scrollTo(0,0);
+
+  // Header
+  document.getElementById('appMatchName').textContent=`Partido — ${data.date}`;
+  document.getElementById('appMatchMeta').textContent=
+    `${data.players.length} jugadores · ${data.meta['Num Players']||data.players.length} GPS units · ${data.fileName||''}`;
+
+  if(!keepTab)showTab('squad');
+  renderSquad(data);
+  populateCompareDropdowns();
+}
+
+function backToHero(){
+  CURRENT=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('hero').style.display='flex';
+  window.scrollTo(0,0);
+}
+function showLoadNew(){
+  const w=document.getElementById('loadNewWrap');
+  w.style.display=w.style.display==='none'?'block':'none';
+}
+
+// ════════════════════════════════════════════════════════════
+//  TAB NAVIGATION
+// ════════════════════════════════════════════════════════════
+function showTab(name){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  if(name==='saved')renderSavedList();
+  if(name==='compare'){populateCompareDropdowns();renderCompare();}
+}
+
+// ════════════════════════════════════════════════════════════
+//  SQUAD RENDER
+// ════════════════════════════════════════════════════════════
+function renderSquad(data){
+  const{players}=data;
+  const rec={
+    dist:Math.max(...players.map(p=>p.dist)),
+    mpm: Math.max(...players.map(p=>p.mpm)),
+    vel: Math.max(...players.map(p=>p.vel)),
+    acc: Math.max(...players.map(p=>p.acc)),
+    dec: Math.max(...players.map(p=>p.dec)),
+    load:Math.max(...players.map(p=>p.load)),
+    tack:Math.max(...players.map(p=>p.tack)),
+  };
+  const avgMpm=(players.reduce((s,p)=>s+p.mpm,0)/players.length);
+  const topDist=players.reduce((a,b)=>a.dist>b.dist?a:b);
+  const topVel= players.reduce((a,b)=>a.vel>b.vel?a:b);
+  const backs=players.filter(p=>p.sector==='Back');
+  const fwds= players.filter(p=>p.sector==='Forward');
+
+  // KPIs
+  document.getElementById('squadKpis').innerHTML=
+    kpi(players.length,'','Jugadores','var(--acid)')+
+    kpi(avgMpm.toFixed(1),'m/min','Intensidad prom.','var(--green)')+
+    kpi(topDist.dist.toFixed(0),'m','Top distancia · '+shortName(topDist.name),'var(--acid)')+
+    kpi(topVel.vel.toFixed(2),'m/s','Vel. máx equipo · '+shortName(topVel.name),'var(--blue)');
+
+  const labels=players.map(p=>shortName(p.name));
+  const sColor=p=>p.sector==='Back'?'rgba(232,255,71,0.65)':'rgba(56,189,248,0.55)';
+  const sBorder=p=>p.sector==='Back'?ACID:BLUE;
+
+  // Distance
+  mkC('cDist','bar',{labels,datasets:[{data:players.map(p=>p.dist.toFixed(0)),backgroundColor:players.map(sColor),borderColor:players.map(sBorder),borderWidth:1,borderRadius:3}]},baseOpts('m'));
+
+  // MPM with avg line
+  mkC('cMpm','bar',{labels,datasets:[{data:players.map(p=>p.mpm.toFixed(1)),backgroundColor:players.map(p=>p.mpm>=avgMpm?'rgba(232,255,71,0.65)':'rgba(232,255,71,0.2)'),borderColor:players.map(p=>p.mpm>=avgMpm?ACID:'rgba(232,255,71,0.3)'),borderWidth:1,borderRadius:3}]},{...baseOpts('m/min'),plugins:{...baseOpts('m/min').plugins,annotation:{annotations:{avg:{type:'line',yMin:avgMpm,yMax:avgMpm,borderColor:'rgba(232,255,71,0.5)',borderWidth:1.5,borderDash:[5,3],label:{content:`Prom: ${avgMpm.toFixed(1)}`,display:true,color:ACID,font:{size:9,family:"'DM Mono',monospace"},backgroundColor:'rgba(9,9,11,0.8)',padding:4}}}}}});
+
+  // Acc/Dec
+  mkC('cAccDec','bar',{labels,datasets:[{label:'Acc',data:players.map(p=>p.acc),backgroundColor:'rgba(74,222,128,0.6)',borderRadius:2,borderSkipped:false},{label:'Dec',data:players.map(p=>p.dec),backgroundColor:'rgba(244,63,94,0.5)',borderRadius:2,borderSkipped:false}]},{...baseOpts(),plugins:{...baseOpts().plugins,legend:{display:true,labels:{color:'rgba(244,244,245,0.5)',font:{size:9},boxWidth:8,padding:12}}}});
+
+  // Velocity
+  mkC('cVel','bar',{labels,datasets:[{data:players.map(p=>p.vel.toFixed(2)),backgroundColor:players.map(p=>p.vel===rec.vel?'rgba(232,255,71,0.8)':'rgba(56,189,248,0.5)'),borderColor:players.map(p=>p.vel===rec.vel?ACID:BLUE),borderWidth:1,borderRadius:3}]},baseOpts('m/s'));
+
+  // Player Load
+  mkC('cLoad','bar',{labels,datasets:[{data:players.map(p=>p.load.toFixed(0)),backgroundColor:'rgba(167,139,250,0.5)',borderColor:'rgba(167,139,250,0.8)',borderWidth:1,borderRadius:3}]},baseOpts(''));
+
+  // Half splits
+  const wh=players.filter(p=>p.dist1!=null&&p.dist2!=null);
+  if(wh.length>0){
+    mkC('cHalf','bar',{labels:wh.map(p=>shortName(p.name)),datasets:[{label:'1er Tiempo',data:wh.map(p=>p.dist1.toFixed(0)),backgroundColor:'rgba(232,255,71,0.6)',borderRadius:2},{label:'2do Tiempo',data:wh.map(p=>p.dist2.toFixed(0)),backgroundColor:'rgba(56,189,248,0.5)',borderRadius:2}]},{...baseOpts('m'),plugins:{...baseOpts('m').plugins,legend:{display:true,labels:{color:'rgba(244,244,245,0.5)',font:{size:9},boxWidth:8,padding:12}}}});
+  }
+
+  // Player cards
+  document.getElementById('backs-count').textContent=backs.length+' jugadores';
+  document.getElementById('fwds-count').textContent=fwds.length+' jugadores';
+  document.getElementById('backsGrid').innerHTML=backs.map(p=>playerCard(p,rec)).join('');
+  document.getElementById('fwdsGrid').innerHTML=fwds.map(p=>playerCard(p,rec)).join('');
+
+  // Table
+  document.getElementById('squadTable').innerHTML=players.map(p=>`<tr>
+    <td style="font-weight:500;color:var(--white)">${p.name}</td>
+    <td class="dim">${p.posClean}</td>
+    <td><span class="badge ${p.sector==='Back'?'b-back':'b-fwd'}">${p.sector}</span></td>
+    ${tdTop(p.dist.toFixed(0),p.dist===rec.dist)}
+    <td>${p.mpm.toFixed(1)}</td>
+    ${tdTop(p.vel.toFixed(2),p.vel===rec.vel)}
+    ${tdTop(p.acc,p.acc===rec.acc)}
+    <td>${p.dec}</td>
+    <td>${p.tack}</td>
+    ${tdTop(p.load.toFixed(0),p.load===rec.load)}
+    <td class="dim">${p.min!=null?p.min+"'":'—'}</td>
+  </tr>`).join('');
+}
+
+function playerCard(p,rec){
+  const isTop=p.dist===rec.dist||p.vel===rec.vel;
+  let halfBar='';
+  if(p.dist1!=null&&p.dist2!=null){
+    const tot=p.dist1+p.dist2,pct=Math.round((p.dist1/tot)*100);
+    halfBar=`<div class="half-split">
+      <div class="half-lbl">1T ${p.dist1.toFixed(0)}m · 2T ${p.dist2.toFixed(0)}m</div>
+      <div class="half-track"><div class="half-t1" style="width:${pct}%"></div><div class="half-t2" style="width:${100-pct}%"></div></div>
+    </div>`;
+  }
+  return`<div class="player-card ${isTop?'is-top':''}">
+    <div class="pc-name">${p.name}</div>
+    <div class="pc-pos"><span class="badge ${p.sector==='Back'?'b-back':'b-fwd'}">${p.sector}</span>${p.posClean}${p.min!=null?' · '+p.min+"'":''}  </div>
+    <div class="pc-row"><span class="pc-label">Distancia</span><span class="pc-val ${p.dist===rec.dist?'top':p.dist>5000?'good':''}">${p.dist.toFixed(0)} m${p.dist===rec.dist?' ★':''}</span></div>
+    <div class="pc-row"><span class="pc-label">Intensidad</span><span class="pc-val ${p.mpm===rec.mpm?'top':''}">${p.mpm.toFixed(1)} m/min${p.mpm===rec.mpm?' ★':''}</span></div>
+    <div class="pc-row"><span class="pc-label">Vel. Máx</span><span class="pc-val ${p.vel===rec.vel?'top':p.vel>7?'good':''}">${p.vel.toFixed(2)} m/s${p.vel===rec.vel?' ★':''}</span></div>
+    <div class="pc-row"><span class="pc-label">Acc / Dec</span><span class="pc-val ${p.acc===rec.acc?'top':''}">${p.acc} / ${p.dec}${p.acc===rec.acc?' ★':''}</span></div>
+    <div class="pc-row"><span class="pc-label">Tackles</span><span class="pc-val">${p.tack}</span></div>
+    <div class="pc-row"><span class="pc-label">Player Load</span><span class="pc-val">${p.load.toFixed(0)}</span></div>
+    ${halfBar}
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  SAVED REPORTS
+// ════════════════════════════════════════════════════════════
+function loadSaved(){
+  try{const s=localStorage.getItem('setpiece_reports');return s?JSON.parse(s):[];}
+  catch{return[];}
+}
+function persistSaved(){
+  try{localStorage.setItem('setpiece_reports',JSON.stringify(SAVED_REPORTS));}catch{}
+}
+function saveCurrentReport(){
+  if(!CURRENT)return;
+  const id=Date.now().toString();
+  const name=prompt('Nombre del reporte:',`Partido ${CURRENT.date}`);
+  if(!name)return;
+  // Save lean version (no raw csv text to save space)
+  const lean={...CURRENT};delete lean.raw;
+  SAVED_REPORTS.push({id,name,date:CURRENT.date,players:CURRENT.players.length,data:lean});
+  persistSaved();
+  populateCompareDropdowns();
+  alert(`Reporte "${name}" guardado.`);
+}
+function deleteReport(id){
+  SAVED_REPORTS=SAVED_REPORTS.filter(r=>r.id!==id);
+  persistSaved();
+  renderSavedList();
+  populateCompareDropdowns();
+}
+function loadSavedReport(id){
+  const rep=SAVED_REPORTS.find(r=>r.id===id);
+  if(!rep)return;
+  loadReport(rep.data);
+}
+function clearAllReports(){
+  if(!confirm('¿Borrar todos los reportes guardados?'))return;
+  SAVED_REPORTS=[];persistSaved();renderSavedList();populateCompareDropdowns();
+}
+function renderSavedList(){
+  const el=document.getElementById('savedList');
+  if(SAVED_REPORTS.length===0){
+    el.innerHTML=`<div class="no-reports">No hay reportes guardados todavía.<br>Cargá un CSV y usá "Guardar reporte".</div>`;
+    return;
+  }
+  el.innerHTML=`<div class="reports-list">${SAVED_REPORTS.map(r=>`
+    <div class="report-item">
+      <div>
+        <div class="report-item-name">${r.name}</div>
+        <div class="report-item-meta">${r.date} · ${r.players} jugadores</div>
+      </div>
+      <div class="report-item-actions">
+        <button class="btn btn-ghost" onclick="loadSavedReport('${r.id}')">Cargar</button>
+        <button class="btn btn-danger" onclick="deleteReport('${r.id}')">✕</button>
+      </div>
+    </div>`).join('')}</div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  COMPARE
+// ════════════════════════════════════════════════════════════
+function populateCompareDropdowns(){
+  ['cmpA','cmpB'].forEach(id=>{
+    const sel=document.getElementById(id);
+    const prev=sel.value;
+    sel.innerHTML='<option value="">— Seleccioná un partido —</option>';
+    // Add current if loaded
+    if(CURRENT){
+      const opt=document.createElement('option');
+      opt.value='__current__';
+      opt.textContent=`(Actual) Partido ${CURRENT.date}`;
+      sel.appendChild(opt);
+    }
+    SAVED_REPORTS.forEach(r=>{
+      const opt=document.createElement('option');
+      opt.value=r.id;opt.textContent=`${r.name} — ${r.date}`;
+      sel.appendChild(opt);
+    });
+    if(prev)sel.value=prev;
+  });
+}
+function getReportData(val){
+  if(!val)return null;
+  if(val==='__current__')return CURRENT;
+  const rep=SAVED_REPORTS.find(r=>r.id===val);
+  return rep?rep.data:null;
+}
+
+function renderCompare(){
+  const aVal=document.getElementById('cmpA').value;
+  const bVal=document.getElementById('cmpB').value;
+  const body=document.getElementById('compareBody');
+  if(!aVal||!bVal){body.innerHTML=`<div class="empty-compare">Seleccioná dos partidos para comparar</div>`;return;}
+  if(aVal===bVal){body.innerHTML=`<div class="empty-compare">Seleccioná dos partidos distintos</div>`;return;}
+  const A=getReportData(aVal),B=getReportData(bVal);
+  if(!A||!B){body.innerHTML=`<div class="empty-compare">No se encontraron los datos</div>`;return;}
+
+  const nameA=document.getElementById('cmpA').options[document.getElementById('cmpA').selectedIndex].text;
+  const nameB=document.getElementById('cmpB').options[document.getElementById('cmpB').selectedIndex].text;
+
+  const aPlayers=A.players,bPlayers=B.players;
+  const aAvgMpm=(aPlayers.reduce((s,p)=>s+p.mpm,0)/aPlayers.length);
+  const bAvgMpm=(bPlayers.reduce((s,p)=>s+p.mpm,0)/bPlayers.length);
+  const aAvgDist=(aPlayers.reduce((s,p)=>s+p.dist,0)/aPlayers.length);
+  const bAvgDist=(bPlayers.reduce((s,p)=>s+p.dist,0)/bPlayers.length);
+  const aTopVel=Math.max(...aPlayers.map(p=>p.vel));
+  const bTopVel=Math.max(...bPlayers.map(p=>p.vel));
+  const aAvgAcc=(aPlayers.reduce((s,p)=>s+p.acc,0)/aPlayers.length);
+  const bAvgAcc=(bPlayers.reduce((s,p)=>s+p.acc,0)/bPlayers.length);
+  const aAvgDec=(aPlayers.reduce((s,p)=>s+p.dec,0)/aPlayers.length);
+  const bAvgDec=(bPlayers.reduce((s,p)=>s+p.dec,0)/bPlayers.length);
+  const aAvgLoad=(aPlayers.reduce((s,p)=>s+p.load,0)/aPlayers.length);
+  const bAvgLoad=(bPlayers.reduce((s,p)=>s+p.load,0)/bPlayers.length);
+
+  const metrics=[
+    {label:'Distancia Prom. (m)',  a:aAvgDist,b:bAvgDist,  fmt:v=>v.toFixed(0)},
+    {label:'Intensidad Prom. (m/min)',a:aAvgMpm,b:bAvgMpm, fmt:v=>v.toFixed(1)},
+    {label:'Velocidad Máx. Equipo (m/s)',a:aTopVel,b:bTopVel,fmt:v=>v.toFixed(2)},
+    {label:'Acc Prom.',            a:aAvgAcc,b:bAvgAcc,     fmt:v=>v.toFixed(1)},
+    {label:'Dec Prom.',            a:aAvgDec,b:bAvgDec,     fmt:v=>v.toFixed(1)},
+    {label:'Player Load Prom.',    a:aAvgLoad,b:bAvgLoad,   fmt:v=>v.toFixed(1)},
+    {label:'Jugadores en cancha',  a:aPlayers.length,b:bPlayers.length,fmt:v=>v},
+  ];
+
+  body.innerHTML=`
+    <div class="card" style="margin-bottom:1rem">
+      <div style="display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:1rem;margin-bottom:1.5rem">
+        <div style="text-align:right">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--acid);letter-spacing:.04em">${nameA}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.55rem;color:var(--muted);letter-spacing:.12em;text-transform:uppercase">${A.date} · ${aPlayers.length} jugadores</div>
+        </div>
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--muted);letter-spacing:.1em">VS</div>
+        <div>
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--blue);letter-spacing:.04em">${nameB}</div>
+          <div style="font-family:'DM Mono',monospace;font-size:.55rem;color:var(--muted);letter-spacing:.12em;text-transform:uppercase">${B.date} · ${bPlayers.length} jugadores</div>
+        </div>
+      </div>
+      ${metrics.map(m=>{
+        const tot=m.a+m.b||1;
+        const pctA=Math.round((m.a/tot)*100);
+        const win=m.a>m.b?'left':m.b>m.a?'right':'tie';
+        return`<div style="margin-bottom:1.1rem">
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:.75rem;align-items:center;margin-bottom:.4rem">
+            <div style="text-align:right">
+              <span style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.03em;color:var(--acid)">${m.fmt(m.a)}</span>
+              ${win==='left'?`<span class="cmp-winner cmp-w-left" style="display:inline-block;margin-left:.4rem">▲</span>`:''}
+            </div>
+            <div style="font-family:'DM Mono',monospace;font-size:.52rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:center;line-height:1.4">${m.label}</div>
+            <div>
+              <span style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.03em;color:var(--blue)">${m.fmt(m.b)}</span>
+              ${win==='right'?`<span class="cmp-winner cmp-w-right" style="display:inline-block;margin-left:.4rem">▲</span>`:''}
+            </div>
+          </div>
+          <div class="cmp-bar-track">
+            <div class="cmp-bar-left" style="width:${pctA}%"></div>
+            <div class="cmp-bar-right" style="width:${100-pctA}%"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title">Comparación de jugadores comunes</div>
+      ${renderPlayerCompareTable(aPlayers,bPlayers)}
+    </div>`;
+
+  // Draw radar comparison
+}
+
+function renderPlayerCompareTable(aPlayers,bPlayers){
+  const common=aPlayers.filter(a=>bPlayers.some(b=>b.name===a.name));
+  if(common.length===0)return`<div style="font-family:'DM Mono',monospace;font-size:.65rem;color:var(--muted);text-align:center;padding:1.5rem">No hay jugadores en común entre los dos partidos</div>`;
+  return`<div class="ts"><table class="data-table">
+    <thead><tr><th>Jugador</th><th>Dist A</th><th>Dist B</th><th>Δ Dist</th><th>m/min A</th><th>m/min B</th><th>Δ Intens.</th><th>Vel A</th><th>Vel B</th></tr></thead>
+    <tbody>${common.map(a=>{
+      const b=bPlayers.find(x=>x.name===a.name);
+      const dd=(b.dist-a.dist),di=(b.mpm-a.mpm).toFixed(1),dv=(b.vel-a.vel).toFixed(2);
+      const dc=dd>0?'style="color:var(--green)"':dd<0?'style="color:var(--red)"':'';
+      return`<tr>
+        <td style="color:var(--white);font-weight:500">${a.name}</td>
+        <td style="color:var(--acid)">${a.dist.toFixed(0)}</td>
+        <td style="color:var(--blue)">${b.dist.toFixed(0)}</td>
+        <td ${dc}>${dd>0?'+':''}${dd.toFixed(0)}</td>
+        <td style="color:var(--acid)">${a.mpm.toFixed(1)}</td>
+        <td style="color:var(--blue)">${b.mpm.toFixed(1)}</td>
+        <td ${di>0?'style="color:var(--green)"':di<0?'style="color:var(--red)"':''}>${di>0?'+':''}${di}</td>
+        <td style="color:var(--acid)">${a.vel.toFixed(2)}</td>
+        <td style="color:var(--blue)">${b.vel.toFixed(2)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table></div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════════════════
+function kpi(val,unit,label,accent){
+  return`<div class="kpi" style="--ka:${accent}">
+    <div class="kl">${label}</div>
+    <div class="kv">${val}<span class="ku">${unit}</span></div>
+  </div>`;
+}
+function tdTop(val,isTop){
+  return isTop?`<td class="cell-top">${val}<span class="star">★</span></td>`:`<td>${val}</td>`;
+}
+function shortName(name){
+  const p=name.trim().split(' ');
+  return p.length>=2?p[0]+' '+p[1][0]+'.':p[0];
+}
+
+// ════════════════════════════════════════════════════════════
+//  INIT
+// ════════════════════════════════════════════════════════════
+populateCompareDropdowns();
+</script>
+</body>
+</html>
